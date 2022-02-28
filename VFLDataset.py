@@ -1,8 +1,12 @@
-from typing import Mapping, Sequence, Tuple
+from typing import Mapping, Sequence, Tuple, TypedDict
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from abc import ABC, abstractmethod
+
+class LoaderDict(TypedDict):
+    train_loader: DataLoader
+    test_loader: DataLoader
 
 
 class VFLDataLoader(ABC):
@@ -19,6 +23,6 @@ class VFLDataLoader(ABC):
     # Distribute dataloader to each client in clients_list
     # Return a dictionary {clients_id: (train)}    
     @abstractmethod
-    def distribute(self) -> Mapping[int, Tuple[DataLoader, ...]]:
+    def distribute(self) -> LoaderDict:
         pass
 
