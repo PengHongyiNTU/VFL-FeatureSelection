@@ -1,18 +1,16 @@
 from abc import ABC, abstractmethod
-from types import Union
 import torch
-import numpy as np
 
 from Courier import Courier
 
-class Strategey(ABC):
+class Strategy(ABC):
     def __init__(self, courier:Courier):
         self.courier = courier
     @abstractmethod
     def aggregate(self):
         pass
 
-class SyncConcatStrategey(Strategey):
+class SyncConcatStrategey(Strategy):
     def __init__(self, courier):
         super().__init__(courier)
 

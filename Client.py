@@ -1,7 +1,7 @@
 
 from torch.utils.data import DataLoader
 import torch
-from torch import gradient, nn
+from torch import nn
 from typing import Union
 from Courier import Courier
 from abc import ABC, abstractmethod
@@ -11,7 +11,7 @@ class Client(ABC):
     def __init__(self, id:Union[int, str], 
     model:nn.Module, 
     courier:Courier, train_loader:DataLoader, 
-    test_loader:DataLoader, config_dir) -> None:
+    test_loader:DataLoader, config_dir:str) -> None:
         self.id = id
         self.model = model
         self.courier = courier
@@ -37,6 +37,8 @@ class Client(ABC):
 
         
 
+
+
 class SyncFNNClient(Client):
     def __init__(self, id, model, courier, train_loader, 
     test_loader, config_dir):
@@ -46,6 +48,10 @@ class SyncFNNClient(Client):
         if self.client_config['Optimizer'] == 'adam':
             lr = float(self.client_config['LearningRate'])
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        if self.client_config['Device'] == 'cuda':
+            self.device = torch.device('cuda') 
+        else:
+            self.device = torch.device('cpu')
 
     def is_available(self):
         return True
@@ -61,12 +67,16 @@ class SyncFNNClient(Client):
     def fit(self):
         if self.is_available():
             self.model.train()
+            self.model.to(self.device)
             for x in self.train_loader:
+                x = x.float().to(self.device)
                 self.optimizer.zero_grad()
                 emb = self.model(x)
                 self.send(emb)
                 # Simple Concat Dont Require Fetched Gradient
-                grad = self.recv(gradient)
+                res = self.recv()
+                # Speed up the gradient calculation
+                # Don't recompute the gradient since the SimpleConcatStrategy is used
                 self.optimizer.step()
 
 
