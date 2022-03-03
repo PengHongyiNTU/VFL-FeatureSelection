@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from types import Union
+from typing import Union
 import torch
 import numpy as np
 
@@ -8,9 +8,10 @@ class Courier(ABC):
         self.clients_list = clients_list
         self.message_pool = dict.fromkeys(clients_list, None)
         self.response_pool = dict.fromkeys(clients_list, None)
+    
     @abstractmethod
     def respond(self, id, gradient:torch.tensor)->None:
-        self.response_pool[id] = gradient
+        pass
     @abstractmethod
     def post(self, id:Union[str, int], message) -> None:
         pass
@@ -27,6 +28,15 @@ class Courier(ABC):
 class SyncLocalCourier(Courier):
     def __init__(self, clients_list):
         super().__init__(clients_list)
+        self.server_done = False
+
+    def communication_overhead(self):
+        # Compute the size of each tensor in the mesage pool
+        pass
+
+
+    def respond(self, id, gradient:torch.tensor)->None:
+        self.response_pool[id] = gradient
 
     def post(self, id, message:torch.tensor):
         self.message_pool[id] = message

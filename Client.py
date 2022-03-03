@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 import torch
 from torch import nn
 from typing import Union
-from Courier import Courier
+from Courier import Courier, SyncLocalCourier
 from abc import ABC, abstractmethod
 import configparser
 
@@ -40,7 +40,7 @@ class Client(ABC):
 
 
 class SyncFNNClient(Client):
-    def __init__(self, id, model, courier, train_loader, 
+    def __init__(self, id, model, courier:SyncLocalCourier, train_loader, 
     test_loader, config_dir):
         super().__init__(id, model, courier, train_loader, 
     test_loader, config_dir)
@@ -75,9 +75,19 @@ class SyncFNNClient(Client):
                 self.send(emb)
                 # Simple Concat Dont Require Fetched Gradient
                 res = self.recv()
+                if self.courier.server_done:
                 # Speed up the gradient calculation
                 # Don't recompute the gradient since the SimpleConcatStrategy is used
-                self.optimizer.step()
+                    self.optimizer.step()
+    
+    def predict(self):
+        self.model.eval()
+        with torch.no_grad():
+            for x in self.test_loader:
+                x = x.float().to(self.device)
+                emb = self.model(x)
+                self.send(emb)
+
 
 
 
