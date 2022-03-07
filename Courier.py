@@ -28,7 +28,6 @@ class Courier(ABC):
 class SyncLocalCourier(Courier):
     def __init__(self, clients_list):
         super().__init__(clients_list)
-        self.server_done = False
 
     def communication_overhead(self):
         # Compute the size of each tensor in the mesage pool

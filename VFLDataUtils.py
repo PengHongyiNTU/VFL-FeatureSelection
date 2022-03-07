@@ -41,7 +41,6 @@ class SimpleNumpyDataLoader(VFLDataLoader):
         self.x, self.y = data_source[0], data_source[1]
         self.train_batch_size = train_batch_size
         self.test_batch_size = test_batch_size
-        assert dim_split == len(clients_id_list)-1
         self.dim_split = dim_split
 
     def __preprocess__(self):
@@ -50,36 +49,62 @@ class SimpleNumpyDataLoader(VFLDataLoader):
         feat_dim = self.x.shape[1]
         num_clients = len(self.clients_list)
         if not self.dim_split:
-            feat_idx_list =  np.array_split(np.arange(feat_dim),   num_clients)
+            feat_idx_list =  np.array_split(np.arange(feat_dim),   num_clients+1)
+            for i, feat_idx in enumerate(feat_idx_list[:-1]):
+                print(f'Client {i}: Feature Index {feat_idx[0]}-{feat_idx[-1]}')
+            server_idx = feat_idx_list[-1]
+            print(f'Server : Feature Index {server_idx[0]}-{server_idx[-1]}')
+
+
         else:
             feat_idx_list = []
             start = 0
-            for split in self.dim_split:
-                feat_idx.append(
-                    np.arange(feat_dim)[start: start+split]
+            assert len(self.dim_split) == num_clients and self.dim_split[-1] < feat_dim
+            for i, split in enumerate(self.dim_split):
+                feat_idx_list.append(
+                    np.arange(feat_dim)[start: split]
                 )
-                start = start+split
-            feat_idx_list.append(np.arange(feat_dim)[start:])
-        assert len(feat_idx_list) == num_clients
+                print(f'Client {i}: Feature Index {start}-{split}')
+                start = split
 
+            feat_idx_list.append(np.arange(feat_dim)[start:])
+            print(f'Server : Feature Index {start}-{feat_dim}')
+        assert len(feat_idx_list) == num_clients+1
         for i, clients_id in enumerate(self.dict.keys()):
             feat_idx = feat_idx_list[i]
             self.dict[clients_id] = {
                 'train_loader': 
                  DataLoader(TensorDataset(
-                    torch.tensor(x_train[:, feat_idx]), 
-                    torch.tensor(y_train)), 
-                    batch_size = self.train_batch_size
+                    torch.tensor(x_train[:, feat_idx])), 
+                    batch_size = self.train_batch_size,
+                    shuffle=False
                 ), 
                 'test_loader':
                 DataLoader(
                     TensorDataset(
-                        torch.tensor(x_test[:, feat_idx]), 
-                        torch.tensor(y_test)), 
-                        batch_size = self.test_batch_size
+                        torch.tensor(x_test[:, feat_idx])), 
+                        batch_size = self.test_batch_size,
+                        shuffle=False
                     ) 
 
             }
+        server_idx = feat_idx_list[-1]
+        self.dict['server'] = {
+            'train_loader':  DataLoader(TensorDataset(
+                    torch.tensor(x_train[:, server_idx]), 
+                    torch.tensor(y_train)), 
+                    batch_size = self.train_batch_size,
+                    shuffle=False
+                ), 
+            'test_loader':
+                DataLoader(
+                    TensorDataset(
+                        torch.tensor(x_test[:, feat_idx]), 
+                        torch.tensor(y_test)), 
+                        batch_size = self.test_batch_size,
+                        shuffle=False
+                    ) 
+        }
 
     def distribute(self):
         self.__preprocess__()

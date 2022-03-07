@@ -18,7 +18,9 @@ class Server(ABC):
         self.model = model
         self.train_loader = train_loader
         self.test_loader = test_loader
-        self.config = configparser.ConfigParser.read(config_dir)['Server']
+        self.config = configparser.ConfigParser()
+        self.config.read(config_dir)
+        self.config = self.config['Server']
 
     @abstractmethod
     def fit(self) -> None:
@@ -30,7 +32,7 @@ class Server(ABC):
 
 
 
-class SyncFNNServer(server):
+class SyncFNNServer(Server):
     def __init__(self, strategy:SyncConcatStrategy, courier:SyncLocalCourier, 
     top_model, emb_model, train_loader, test_loader, config_dir,
     criterion=nn.BCELoss()):
@@ -46,7 +48,7 @@ class SyncFNNServer(server):
                 list(self.model.parameters()) + 
                 list(self.emb_model.parameters()), 
                 lr = lr)
-        if self.config['Device'] == 'cude':
+        if self.config['Device'] == 'cuda':
             self.device = torch.device('cuda')
         else:
             self.device = torch.device('cpu')   
@@ -54,7 +56,7 @@ class SyncFNNServer(server):
         self.emb_model = self.emb_model.to(self.device)
 
 
-    def binary_acc(out, y):
+    def binary_acc(self, out, y):
         acc = accuracy_score(y, out>0.5)
         return acc
         
@@ -64,10 +66,14 @@ class SyncFNNServer(server):
         train_loss = 0
         for x, y in self.train_loader:
             x = x.float().to(self.device)
-            y = y.float().to(self.device)
+            y = y.float().to(self.device).view(-1, 1)
             self.optimizer.zero_grad()
             server_emb = self.emb_model(x)
-            clients_emb = self.strategy.aggreate()
+            clients_emb = self.strategy.aggregate()
+            # print('server-emb', server_emb)
+            # print('client-emb', clients_emb)
+            # print('embshape',server_emb.shape)
+            # print('clients-embshape', clients_emb.shape)
             # Notify all clients to optimize their model
             emb = torch.cat([server_emb, clients_emb], 1)
             out = self.model(emb)
@@ -78,10 +84,11 @@ class SyncFNNServer(server):
             # Can also compute the gradient from message_pool again
             # Notify all clients 
             loss.backward()
-            self.courier.server_done = True
+            self.strategy.update_all()
             self.optimizer.step()
             train_loss += loss.item()
             train_acc += acc
+
         test_acc = self.evaluate()
         print(f'Epoch {e+0:03}: | Loss: {train_loss/len(self.train_loader):.5f} | Acc: {train_acc/len(self.train_loader):.3f} | Val ACC: {test_acc/len(self.test_loader):.3f}')
         self.train_acc.append(train_acc/len(self.train_loader))
@@ -89,15 +96,17 @@ class SyncFNNServer(server):
 
             
 
-    def evaluate(self, num_epochs):
+    def evaluate(self):
         self.emb_model.eval()
         self.model.eval()
+        test_acc = 0
         with torch.no_grad():
             for x, y in self.test_loader:
                 x = x.float().to(self.device)
                 y = y.float().to(self.device)
                 server_emb = self.emb_model(x)
-                clients_emb = self.strategy.aggreate()
+
+                clients_emb = self.strategy.aggregate(eval=True)
                 emb = torch.cat([server_emb, clients_emb], 1)
                 out = self.model(emb)
                 acc = self.binary_acc(out.detach().cpu(), y.detach().cpu())
