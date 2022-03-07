@@ -99,7 +99,7 @@ class SimpleNumpyDataLoader(VFLDataLoader):
             'test_loader':
                 DataLoader(
                     TensorDataset(
-                        torch.tensor(x_test[:, feat_idx]), 
+                        torch.tensor(x_test[:, server_idx]), 
                         torch.tensor(y_test)), 
                         batch_size = self.test_batch_size,
                         shuffle=False
