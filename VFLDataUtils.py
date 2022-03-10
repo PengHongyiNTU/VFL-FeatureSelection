@@ -42,6 +42,7 @@ class SimpleNumpyDataLoader(VFLDataLoader):
         self.train_batch_size = train_batch_size
         self.test_batch_size = test_batch_size
         self.dim_split = dim_split
+        self.input_dim_list = None
 
     def __preprocess__(self):
         x_train, x_test, y_train, y_test = train_test_split(
@@ -54,7 +55,6 @@ class SimpleNumpyDataLoader(VFLDataLoader):
                 print(f'Client {i}: Feature Index {feat_idx[0]}-{feat_idx[-1]}')
             server_idx = feat_idx_list[-1]
             print(f'Server : Feature Index {server_idx[0]}-{server_idx[-1]}')
-
 
         else:
             feat_idx_list = []
@@ -69,6 +69,9 @@ class SimpleNumpyDataLoader(VFLDataLoader):
 
             feat_idx_list.append(np.arange(feat_dim)[start:])
             print(f'Server : Feature Index {start}-{feat_dim}')
+        
+        self.input_dim_list = [len(idx) for idx in feat_idx_list]
+
         assert len(feat_idx_list) == num_clients+1
         for i, clients_id in enumerate(self.dict.keys()):
             feat_idx = feat_idx_list[i]
@@ -108,4 +111,4 @@ class SimpleNumpyDataLoader(VFLDataLoader):
 
     def distribute(self):
         self.__preprocess__()
-        return self.dict
+        return self.dict, self.input_dim_list
