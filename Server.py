@@ -83,8 +83,8 @@ class SyncFNNServer(Server):
             # In Sync setting, Gradient will automatically propogate back
             # Can also compute the gradient from message_pool again
             # Notify all clients 
-            loss.backward()
-            self.strategy.update_all()
+            # loss.backward()
+            self.strategy.update_all(loss)
             self.optimizer.step()
             train_loss += loss.item()
             train_acc += acc
@@ -121,3 +121,41 @@ class SyncFNNServer(Server):
         return self.history 
 
 
+
+
+
+
+
+
+class SyncSTGServer(SyncFNNServer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+
+
+    def fit(self, e):
+        train_acc = 0
+        train_loss = 0
+        for x, y in self.train_loader:
+            x = x.float().to(self.device)
+            y = y.float().to(self.device).view(-1, 1)
+            self.optimizer.zero_grad()
+            server_emb = self.emb_model(x)
+            clients_emb = self.strategy.aggregate()
+            emb = torch.cat([server_emb, clients_emb], 1)
+            server_reg_loss = self.emb_model.get_reg_loss()
+            out = self.model(emb)
+            loss = self.criterion(out, y)
+            acc = self.binary_acc(out.detach().cpu(), y.detach().cpu())
+            self.strategy.update_all(loss, server_reg_loss)
+            self.optimizer.step()
+            train_loss += loss.item()
+            train_acc += acc
+        test_acc = self.evaluate()
+        _, num_feats = self.emb_model.get_gates()
+        num_feats += self.strategy.number_of_features()
+        
+
+        print(f'Epoch {e+0:03}: | Loss: {train_loss/len(self.train_loader):.5f} | Acc: {train_acc/len(self.train_loader):.3f} | Val ACC: {test_acc/len(self.test_loader):.3f} | Features Left: {num_feats}')
+        self.train_acc.append(train_acc/len(self.train_loader))
+        self.test_acc.append(test_acc/len(self.test_loader))

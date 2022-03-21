@@ -1,7 +1,7 @@
 from stg.models import MLPLayer, FeatureSelector
 from torch import nn
 import torch 
-
+import numpy as np
 
 class STGEmbModel(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dims, sigma=1.0, lam=0.1):
@@ -19,18 +19,26 @@ class STGEmbModel(nn.Module):
         emb = self.mlp(x)
         return emb
     
-    
     def count_num_features(self)-> int:
         with torch.no_grad():
             for name, param in self.fs.named_parameters():
                 if name == "mu":
                     return param.nonzero().size(0)
                 
-                    
-
     def get_mu(self):
-        return self.mu.deatach().cpu().numpy()
+        mu = self.mu.detach().cpu().numpy()
+        return mu
     
+    def get_reg_loss(self):
+        reg = torch.mean(self.reg((self.mu + 0.5)/self.sigma)) 
+        return self.lam*reg
+
+    def get_gates(self):
+        mu = self.get_mu()
+        z = np.maximum(np.minimum(mu, 1), 0)
+        return z, np.count_nonzero(z)
+
+
 
 
 def make_models(input_dims):
@@ -70,6 +78,20 @@ def make_stg_models(input_dims):
 
 if __name__ == '__main__':
     model = STGEmbModel(input_dim=512, output_dim=128, hidden_dims=[512, 256])
-    x = torch.ones(100, 512)
-    y = model(x)
-    # print(y.shape)s
+    model.train()
+    x = torch.ones(100, 512, requires_grad=True)
+    y = torch.zeros(100, 128, requires_grad=True)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    criterion = nn.MSELoss()
+    mus = []
+    for epoch in range(10):
+        optimizer.zero_grad()
+        out = model(x)
+        loss = criterion(y, out)
+        reg = model.get_reg_loss()
+        total_loss = loss + reg
+        total_loss.backward()
+        print(loss.item(), reg.item())
+        optimizer.step()
+        mus.append(model.get_mu())
+    # print(mus)

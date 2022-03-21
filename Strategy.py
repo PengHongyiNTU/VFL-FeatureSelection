@@ -24,7 +24,8 @@ class SyncConcatStrategy(Strategy):
     def is_all_set(self):
         return not any(elem is None for elem in self.courier.message_pool.values())
     
-    def update_all(self):
+    def update_all(self, loss):
+        loss.backward()
         map(lambda client: client.update(), self.clients)
 
     def aggregate(self, eval=False):
@@ -43,3 +44,25 @@ class SyncConcatStrategy(Strategy):
             self.courier.flush()
             return embs
     
+
+
+
+class SyncSTGConcatStrategy(SyncConcatStrategy):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def update_all(self, loss, server_reg_loss):
+        reg_loss = server_reg_loss
+        for client in self.clients:
+            reg_loss += client.model.get_reg_loss()
+        reg_loss = reg_loss/(len(self.clients)+1)
+        total_loss = reg_loss + loss
+        total_loss.backward()
+        map(lambda client: client.update(), self.clients)
+    
+    def number_of_features(self):
+        num_feats = 0
+        for client in self.clients:
+            _, num = client.model.get_gates()
+            num_feats += num
+        return num_feats
