@@ -6,6 +6,9 @@ import numpy as np
 class STGEmbModel(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_dims, sigma=1.0, lam=0.1):
         super().__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.hidden_dims = hidden_dims
         self.mlp = MLPLayer(input_dim, output_dim, hidden_dims, 
         batch_norm=None, dropout=None, activation='relu', flatten=True)
         self.fs = FeatureSelector(input_dim, sigma, device=torch.device('cuda'))
